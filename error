@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "C:/Users/ININGEM/AppData/Local/Programs/Python/Python311/code/people.py", line 7, in <module>
+    net = cv2.dnn.readNetFromTensorflow(MODEL_WEIGHTS, MODEL_CONFIG)
+cv2.error: OpenCV(4.10.0) D:\a\opencv-python\opencv-python\opencv\modules\dnn\src\caffe\caffe_io.cpp:1138: error: (-2:Unspecified error) FAILED: fs.is_open(). Can't open "frozen_inference_graph.pb" in function 'cv::dnn::ReadProtoFromBinaryFile'
