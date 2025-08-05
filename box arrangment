@@ -26,9 +26,9 @@ def check_box_arrangement(image_path):
     
     # Initialize variables for analysis
     boxes = []
-    misaligned_boxes = []
-    tilted_boxes = []
-    overhanging_boxes = []
+    misaligned_ids = set()
+    tilted_ids = set()
+    overhanging_ids = set()
     
     # Process each contour
     for cnt in contours:
@@ -43,14 +43,14 @@ def check_box_arrangement(image_path):
             area = w * h
             
             # Filter out small objects (noise)
-            if area < 1000:  # Adjust threshold as needed
+            if area < 1000:
                 continue
                 
             # Get minimum area rectangle to check orientation
             rect = cv2.minAreaRect(cnt)
             (cx, cy), (w_rect, h_rect), angle = rect
             
-            # Normalize angle to be between -90 and 90
+            # Normalize angle to be between -45 and 45
             if angle < -45:
                 angle = 90 + angle
             
@@ -76,47 +76,48 @@ def check_box_arrangement(image_path):
         cx, cy = box['center']
         
         # Check for tilting (angle threshold)
-        if abs(box['angle']) > 5:  # Adjust angle threshold as needed
-            tilted_boxes.append(box)
+        if abs(box['angle']) > 5:
+            tilted_ids.add(id(box))
             cv2.drawContours(result_image, [box['contour']], -1, (0, 0, 255), 3)  # Red for tilted
         
         # Check horizontal alignment with neighbors in same row
-        same_row_boxes = [b for b in boxes_sorted if abs(b['center'][1] - cy) < 20]  # Adjust row threshold
+        same_row_boxes = [b for b in boxes_sorted if abs(b['center'][1] - cy) < 20]
         if len(same_row_boxes) > 1:
             avg_y = int(np.mean([b['center'][1] for b in same_row_boxes]))
-            if abs(cy - avg_y) > 10:  # Alignment threshold
-                misaligned_boxes.append(box)
+            if abs(cy - avg_y) > 10:
+                misaligned_ids.add(id(box))
                 cv2.drawContours(result_image, [box['contour']], -1, (0, 165, 255), 3)  # Orange for misaligned
         
-        # Check for overhanging boxes (stacking issues)
+        # Check for overhanging boxes
         for other_box in boxes_sorted:
-            if other_box == box:
+            if other_box is box:
                 continue
                 
             ox, oy = other_box['position']
             ow, oh = other_box['size']
             ocx, ocy = other_box['center']
             
-            # Check if boxes are vertically aligned (stacked)
             if abs(cx - ocx) < 30 and abs(cy - ocy) < (h + oh) / 2:
-                # Check if upper box is within bounds of lower box
                 if cy < ocy:  # Current box is above
                     if cx < ox or cx > ox + ow or cx + w > ox + ow:
-                        overhanging_boxes.append(box)
-                        cv2.drawContours(result_image, [box['contour']], -1, (255, 0, 255), 3)  # Magenta for overhanging
+                        overhanging_ids.add(id(box))
+                        cv2.drawContours(result_image, [box['contour']], -1, (255, 0, 255), 3)  # Magenta
     
     # Generate report
     print("\nBox Arrangement Report:")
     print(f"Total boxes detected: {len(boxes)}")
-    print(f"Properly arranged boxes: {len(boxes) - len(misaligned_boxes) - len(tilted_boxes) - len(overhanging_boxes)}")
-    print(f"Misaligned boxes: {len(misaligned_boxes)}")
-    print(f"Tilted boxes: {len(tilted_boxes)}")
-    print(f"Overhanging boxes: {len(overhanging_boxes)}")
+    total_bad = len(misaligned_ids) + len(tilted_ids) + len(overhanging_ids)
+    print(f"Properly arranged boxes: {len(boxes) - total_bad}")
+    print(f"Misaligned boxes: {len(misaligned_ids)}")
+    print(f"Tilted boxes: {len(tilted_ids)}")
+    print(f"Overhanging boxes: {len(overhanging_ids)}")
     
-    # Draw all detected boxes in green
+    # Draw all properly arranged boxes in green
     for box in boxes:
-        if box not in misaligned_boxes and box not in tilted_boxes and box not in overhanging_boxes:
-            cv2.drawContours(result_image, [box['contour']], -1, (0, 255, 0), 2)  # Green for good
+        if (id(box) not in misaligned_ids and 
+            id(box) not in tilted_ids and 
+            id(box) not in overhanging_ids):
+            cv2.drawContours(result_image, [box['contour']], -1, (0, 255, 0), 2)  # Green
     
     # Display results
     plt.figure(figsize=(12, 8))
@@ -130,6 +131,6 @@ def check_box_arrangement(image_path):
 
 # Example usage
 if __name__ == "__main__":
-    # Replace with your image path
-    image_path = r'C:\Users\ININGEM\Downloads\IMG-20250729-WA0002 1.jpg'  # Note the 'r' prefix for raw string
+    image_path = r'C:\Users\ININGEM\Downloads\IMG-20250729-WA0002.jpg'  # Replace with your image path
     check_box_arrangement(image_path)
+
