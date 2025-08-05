@@ -1,0 +1,111 @@
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+
+def process_frame(frame):
+    result_image = frame.copy()
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    boxes = []
+    misaligned_ids = set()
+    tilted_ids = set()
+    overhanging_ids = set()
+
+    for cnt in contours:
+        peri = cv2.arcLength(cnt, True)
+        approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
+
+        if len(approx) == 4:
+            x, y, w, h = cv2.boundingRect(cnt)
+            area = w * h
+            if area < 1000:
+                continue
+
+            rect = cv2.minAreaRect(cnt)
+            (cx, cy), (w_rect, h_rect), angle = rect
+            if angle < -45:
+                angle = 90 + angle
+
+            box_info = {
+                'contour': cnt,
+                'position': (x, y),
+                'size': (w, h),
+                'center': (cx, cy),
+                'angle': angle,
+                'width': w_rect,
+                'height': h_rect
+            }
+            boxes.append(box_info)
+
+    boxes_sorted = sorted(boxes, key=lambda b: (b['center'][1], b['center'][0]))
+
+    for i, box in enumerate(boxes_sorted):
+        x, y = box['position']
+        w, h = box['size']
+        cx, cy = box['center']
+
+        if abs(box['angle']) > 5:
+            tilted_ids.add(id(box))
+            cv2.drawContours(result_image, [box['contour']], -1, (0, 0, 255), 3)
+
+        same_row_boxes = [b for b in boxes_sorted if abs(b['center'][1] - cy) < 20]
+        if len(same_row_boxes) > 1:
+            avg_y = int(np.mean([b['center'][1] for b in same_row_boxes]))
+            if abs(cy - avg_y) > 10:
+                misaligned_ids.add(id(box))
+                cv2.drawContours(result_image, [box['contour']], -1, (0, 165, 255), 3)
+
+        for other_box in boxes_sorted:
+            if other_box is box:
+                continue
+
+            ox, oy = other_box['position']
+            ow, oh = other_box['size']
+            ocx, ocy = other_box['center']
+
+            if abs(cx - ocx) < 30 and abs(cy - ocy) < (h + oh) / 2:
+                if cy < ocy:
+                    if cx < ox or cx > ox + ow or cx + w > ox + ow:
+                        overhanging_ids.add(id(box))
+                        cv2.drawContours(result_image, [box['contour']], -1, (255, 0, 255), 3)
+
+    for box in boxes:
+        if id(box) not in misaligned_ids and id(box) not in tilted_ids and id(box) not in overhanging_ids:
+            cv2.drawContours(result_image, [box['contour']], -1, (0, 255, 0), 2)
+
+    return result_image
+
+
+def run_realtime_detection(stream_url):
+    cap = cv2.VideoCapture(stream_url)
+
+    if not cap.isOpened():
+        print("Error: Could not connect to camera stream.")
+        return
+
+    print("Press 'q' to quit.")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame.")
+            break
+
+        processed_frame = process_frame(frame)
+
+        cv2.imshow("Box Arrangement - Live", processed_frame)
+
+        # Press 'q' to quit
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+# Example usage
+if __name__ == "__main__":
+    stream_url = "http://192.168.1.100:8080/video"  # Replace with your real camera stream URL
+    run_realtime_detection(stream_url)
