@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "C:/Users/ININGEM/AppData/Local/Programs/Python/Python311/code/box arrAN.py", line 135, in <module>
+    check_box_arrangement(image_path)
+  File "C:/Users/ININGEM/AppData/Local/Programs/Python/Python311/code/box arrAN.py", line 93, in check_box_arrangement
+    if other_box == box:
+ValueError: operands could not be broadcast together with shapes (199,1,2) (100,1,2) 
