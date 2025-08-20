@@ -1,35 +1,62 @@
 from ultralytics import YOLO
 import cv2
-#waiting
-model = YOLO("runs/classify/train/weights/yolov8n-cls.pt")  # Make sure this is your retrained model
+import time
 
-cap = cv2.VideoCapture(0)  # or use your NVR source
+# Load trained classification model
+model = YOLO("runs/classify/train/weights/yolov8n-cls.pt")
+
+# Replace this with your NVR camera RTSP URL
+rtsp_url = "rtsp://username:password@192.168.1.100:554/Streaming/Channels/101"
+
+# Open CCTV stream
+cap = cv2.VideoCapture(rtsp_url)
+
+# Optional: set resolution (depends on camera stream)
+cap.set(3, 1280)
+cap.set(4, 720)
+
+prev_time = 0
 
 while True:
     ret, frame = cap.read()
     if not ret:
+        print("⚠️ Failed to read from CCTV stream.")
         break
 
-    # Run classification
+    # Run classification on frame
     results = model.predict(source=frame, imgsz=224, verbose=False)
 
-    # Extract predicted class index
+    # Extract best prediction
     pred_class = int(results[0].probs.top1)
     conf = float(results[0].probs.top1conf)
-
-    # Print class index to debug
-    print("Predicted class index:", pred_class)
-    print("Class names:", results[0].names)
-
-    # Get actual label name
     label_name = results[0].names[pred_class]
 
-    # Show prediction on screen
-    text = f"{label_name.capitalize()} ({conf:.2f})"
-    cv2.putText(frame, text, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-    cv2.imshow("Box Arrangement Check", frame)
+    # --- FPS calculation ---
+    curr_time = time.time()
+    fps = 1 / (curr_time - prev_time) if prev_time else 0
+    prev_time = curr_time
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    # --- Dashboard Overlay ---
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (5, 5), (420, 120), (0, 0, 0), -1)  # black background
+    alpha = 0.6
+    frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+
+    # Green if "correct", Red otherwise
+    color = (0, 255, 0) if "correct" in label_name.lower() else (0, 0, 255)
+
+    cv2.putText(frame, f"Prediction: {label_name}", (15, 45),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+    cv2.putText(frame, f"Confidence: {conf:.2f}", (15, 80),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+    cv2.putText(frame, f"FPS: {fps:.1f}", (300, 110),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+    # Show live feed
+    cv2.imshow("Box Arrangement Check - CCTV", frame)
+
+    # Exit on 'q' or ESC
+    if cv2.waitKey(1) & 0xFF in [ord('q'), 27]:
         break
 
 cap.release()
