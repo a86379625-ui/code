@@ -1,0 +1,86 @@
+from ultralytics import YOLO
+import cv2
+import time
+
+# Load your trained model
+model = YOLO("best.pt")
+
+# Print model class names once
+print("Model classes:", model.names)
+
+# Replace this with your CCTV RTSP/HTTP stream URL
+# Example RTSP format:
+# rtsp://username:password@CAMERA_IP:554/Streaming/Channels/101
+# Example HTTP format (for some IP cameras):
+# http://username:password@CAMERA_IP:8080/video
+
+ip_camera_url = "rtsp://admin:12345@192.168.1.100:554/Streaming/Channels/101"
+
+# Open IP camera stream instead of webcam
+cap = cv2.VideoCapture(ip_camera_url)
+
+if not cap.isOpened():
+    print("❌ Failed to connect to camera. Check URL/credentials.")
+    exit()
+
+prev_time = 0
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("⚠️ Failed to grab frame. Reconnecting...")
+        cap = cv2.VideoCapture(ip_camera_url)
+        continue
+
+    # Run YOLO prediction with lower confidence threshold
+    results = model(frame, conf=0.2)[0]
+
+    person_count = 0
+    phone_user_count = 0
+
+    # Loop over detections
+    for box in results.boxes:
+        cls_id = int(box.cls[0])
+        label = model.names[cls_id]
+        conf = float(box.conf[0])
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+        print(f"Detected: {label} ({conf:.2f})")
+
+        if label == "person":
+            person_count += 1
+            color = (0, 255, 0)
+        elif label == "using_phone":
+            phone_user_count += 1
+            color = (0, 0, 255)
+        else:
+            color = (255, 255, 0)  # default color
+
+        # Draw bounding box and label
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+    # --- FPS calculation ---
+    curr_time = time.time()
+    fps = 1 / (curr_time - prev_time) if prev_time else 0
+    prev_time = curr_time
+
+    # --- Dashboard overlay ---
+    cv2.rectangle(frame, (5, 5), (350, 150), (0, 0, 0), -1)  # black background box
+    cv2.putText(frame, f"People: {person_count}", (15, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+    cv2.putText(frame, f"Using Phone: {phone_user_count}", (15, 80),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+    cv2.putText(frame, f"FPS: {fps:.1f}", (15, 120),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+
+    # Show live feed
+    cv2.imshow("Phone Usage Detection - CCTV Feed", frame)
+
+    # Exit with 'q' or 'ESC'
+    if cv2.waitKey(1) & 0xFF in [ord('q'), 27]:
+        break
+
+cap.release()
+cv2.destroyAllWindows()
