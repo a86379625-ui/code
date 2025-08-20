@@ -1,0 +1,36 @@
+from ultralytics import YOLO
+import cv2
+#waiting
+model = YOLO("runs/classify/train/weights/yolov8n-cls.pt")  # Make sure this is your retrained model
+
+cap = cv2.VideoCapture(0)  # or use your NVR source
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    # Run classification
+    results = model.predict(source=frame, imgsz=224, verbose=False)
+
+    # Extract predicted class index
+    pred_class = int(results[0].probs.top1)
+    conf = float(results[0].probs.top1conf)
+
+    # Print class index to debug
+    print("Predicted class index:", pred_class)
+    print("Class names:", results[0].names)
+
+    # Get actual label name
+    label_name = results[0].names[pred_class]
+
+    # Show prediction on screen
+    text = f"{label_name.capitalize()} ({conf:.2f})"
+    cv2.putText(frame, text, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+    cv2.imshow("Box Arrangement Check", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
