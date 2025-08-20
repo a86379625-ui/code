@@ -1,60 +1,44 @@
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
 
-def check_box_arrangement(image_path):
-    # Load the image
-    image = cv2.imread(image_path)
-    if image is None:
-        print("Error: Could not read image")
-        return
-    
-    # Create a copy for drawing results
-    result_image = image.copy()
-    
+def analyze_frame(frame):
+    # Copy for drawing results
+    result_image = frame.copy()
+
     # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply Gaussian blur to reduce noise
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Blur to reduce noise
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Edge detection using Canny
+
+    # Edge detection
     edges = cv2.Canny(blurred, 50, 150)
-    
+
     # Find contours
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Initialize variables for analysis
+
+    # Initialize tracking
     boxes = []
     misaligned_ids = set()
     tilted_ids = set()
     overhanging_ids = set()
-    
-    # Process each contour
+
     for cnt in contours:
-        # Approximate contour to polygon
         peri = cv2.arcLength(cnt, True)
         approx = cv2.approxPolyDP(cnt, 0.02 * peri, True)
-        
-        # If contour has 4 points, it's likely a rectangle
-        if len(approx) == 4:
-            # Get bounding rectangle
+
+        if len(approx) == 4:  # rectangle
             x, y, w, h = cv2.boundingRect(cnt)
             area = w * h
-            
-            # Filter out small objects (noise)
-            if area < 1000:
+            if area < 1000:  # filter small noise
                 continue
-                
-            # Get minimum area rectangle to check orientation
+
             rect = cv2.minAreaRect(cnt)
             (cx, cy), (w_rect, h_rect), angle = rect
-            
-            # Normalize angle to be between -45 and 45
+
             if angle < -45:
                 angle = 90 + angle
-            
-            # Store box information
+
             box_info = {
                 'contour': cnt,
                 'position': (x, y),
@@ -65,72 +49,86 @@ def check_box_arrangement(image_path):
                 'height': h_rect
             }
             boxes.append(box_info)
-    
-    # Sort boxes by position (top to bottom, left to right)
+
+    # Sort boxes
     boxes_sorted = sorted(boxes, key=lambda b: (b['center'][1], b['center'][0]))
-    
-    # Check alignment and stacking
+
+    # Check alignment
     for i, box in enumerate(boxes_sorted):
         x, y = box['position']
         w, h = box['size']
         cx, cy = box['center']
-        
-        # Check for tilting (angle threshold)
-        if abs(box['angle']) > 5:
+
+        if abs(box['angle']) > 5:  # tilted
             tilted_ids.add(id(box))
-            cv2.drawContours(result_image, [box['contour']], -1, (0, 0, 255), 3)  # Red for tilted
-        
-        # Check horizontal alignment with neighbors in same row
+            cv2.drawContours(result_image, [box['contour']], -1, (0, 0, 255), 3)
+
+        # Row alignment
         same_row_boxes = [b for b in boxes_sorted if abs(b['center'][1] - cy) < 20]
         if len(same_row_boxes) > 1:
             avg_y = int(np.mean([b['center'][1] for b in same_row_boxes]))
             if abs(cy - avg_y) > 10:
                 misaligned_ids.add(id(box))
-                cv2.drawContours(result_image, [box['contour']], -1, (0, 165, 255), 3)  # Orange for misaligned
-        
-        # Check for overhanging boxes
+                cv2.drawContours(result_image, [box['contour']], -1, (0, 165, 255), 3)
+
+        # Overhanging
         for other_box in boxes_sorted:
             if other_box is box:
                 continue
-                
             ox, oy = other_box['position']
             ow, oh = other_box['size']
             ocx, ocy = other_box['center']
-            
+
             if abs(cx - ocx) < 30 and abs(cy - ocy) < (h + oh) / 2:
-                if cy < ocy:  # Current box is above
+                if cy < ocy:  # above another box
                     if cx < ox or cx > ox + ow or cx + w > ox + ow:
                         overhanging_ids.add(id(box))
-                        cv2.drawContours(result_image, [box['contour']], -1, (255, 0, 255), 3)  # Magenta
-    
-    # Generate report
-    print("\nBox Arrangement Report:")
-    print(f"Total boxes detected: {len(boxes)}")
-    total_bad = len(misaligned_ids) + len(tilted_ids) + len(overhanging_ids)
-    print(f"Properly arranged boxes: {len(boxes) - total_bad}")
-    print(f"Misaligned boxes: {len(misaligned_ids)}")
-    print(f"Tilted boxes: {len(tilted_ids)}")
-    print(f"Overhanging boxes: {len(overhanging_ids)}")
-    
-    # Draw all properly arranged boxes in green
+                        cv2.drawContours(result_image, [box['contour']], -1, (255, 0, 255), 3)
+
+    # Draw good boxes in green
     for box in boxes:
-        if (id(box) not in misaligned_ids and 
-            id(box) not in tilted_ids and 
+        if (id(box) not in misaligned_ids and
+            id(box) not in tilted_ids and
             id(box) not in overhanging_ids):
-            cv2.drawContours(result_image, [box['contour']], -1, (0, 255, 0), 2)  # Green
-    
-    # Display results
-    plt.figure(figsize=(12, 8))
-    plt.subplot(121), plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)), plt.title('Original Image')
-    plt.subplot(122), plt.imshow(cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)), plt.title('Arrangement Check')
-    plt.show()
-    
-    # Save result image
-    cv2.imwrite('box_arrangement_result.jpg', result_image)
-    print("\nResult image saved as 'box_arrangement_result.jpg'")
+            cv2.drawContours(result_image, [box['contour']], -1, (0, 255, 0), 2)
 
-# Example usage
+    return result_image, len(boxes), len(misaligned_ids), len(tilted_ids), len(overhanging_ids)
+
+
 if __name__ == "__main__":
-    image_path = r'C:\Users\ININGEM\Downloads\IMG-20250729-WA0002.jpg'  # Replace with your image path
-    check_box_arrangement(image_path)
+    # Replace with your camera RTSP stream URL from NVR
+    # Example: "rtsp://username:password@192.168.1.100:554/stream1"
+    camera_url = "rtsp://username:password@<camera_ip>/Streaming/Channels/101"
 
+    cap = cv2.VideoCapture(camera_url)
+
+    if not cap.isOpened():
+        print("Error: Could not connect to camera.")
+        exit()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame.")
+            break
+
+        result_frame, total_boxes, misaligned, tilted, overhanging = analyze_frame(frame)
+
+        # Show stats on screen
+        cv2.putText(result_frame, f"Total: {total_boxes}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        cv2.putText(result_frame, f"Misaligned: {misaligned}", (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
+        cv2.putText(result_frame, f"Tilted: {tilted}", (10, 90),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        cv2.putText(result_frame, f"Overhanging: {overhanging}", (10, 120),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2)
+
+        # Display
+        cv2.imshow("Box Arrangement Live Feed", result_frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
