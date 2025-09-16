@@ -1,0 +1,97 @@
+import cv2
+import numpy as np
+
+def check_arrangement(reference_path, test_path):
+   
+    ref_img = cv2.imread(reference_path)
+    test_img = cv2.imread(test_path)
+
+    if ref_img is None or test_img is None:
+        print("Error: Could not load one of the images.")
+        return
+
+    height = 600
+    ref_img = cv2.resize(ref_img, (int(ref_img.shape[1] * height / ref_img.shape[0]), height))
+    test_img = cv2.resize(test_img, (int(test_img.shape[1] * height / test_img.shape[0]), height))
+
+    def find_brown_boxes(image):
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        lower_brown = np.array([10, 50, 20])
+        upper_brown = np.array([40, 255, 200])
+
+        mask = cv2.inRange(hsv, lower_brown, upper_brown)
+
+        kernel = np.ones((5, 5), np.uint8)
+        dilated_mask = cv2.dilate(mask, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(dilated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        boxes = []
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+            aspect_ratio = w / float(h)
+            area = cv2.contourArea(cnt)
+
+            if area > 2000 and 0.5 < aspect_ratio < 2.0:
+                boxes.append((x, y, w, h))
+
+        boxes.sort(key=lambda b: (b[1], b[0]))
+        return boxes
+
+    def compare_box_positions(ref_boxes, test_boxes, threshold=50):
+        if len(ref_boxes) != len(test_boxes):
+            return False  # Number of boxes must match
+
+        for i in range(len(ref_boxes)):
+            ref_x, ref_y, ref_w, ref_h = ref_boxes[i]
+            test_x, test_y, test_w, test_h = test_boxes[i]
+
+            dist_x = abs((ref_x + ref_w / 2) - (test_x + test_w / 2))
+            dist_y = abs((ref_y + ref_h / 2) - (test_y + test_h / 2))
+
+            if dist_x > threshold or dist_y > threshold:
+                return False
+        
+        return True
+
+    
+    ref_boxes = find_brown_boxes(ref_img)
+    test_boxes = find_brown_boxes(test_img)
+
+    
+    for (x, y, w, h) in ref_boxes:
+        cv2.rectangle(ref_img, (x, y), (x + w, y + h), (50, 50, 200), 3)  # Reddish
+    for (x, y, w, h) in test_boxes:
+        cv2.rectangle(test_img, (x, y), (x + w, y + h), (200, 50, 50), 3)  # Bluish
+
+    result_text = ""
+    result_color = (0, 0, 0) 
+
+    # Case 1: The area is completely empty but should have boxes.
+    if len(ref_boxes) > 0 and len(test_boxes) == 0:
+        result_text = "Result: EMPTY"
+        result_color = (0, 0, 255) # Red
+
+    # Case 2: The arrangement is correct (matching count and position).
+    elif compare_box_positions(ref_boxes, test_boxes):
+        result_text = "Result: OK"
+        result_color = (0, 255, 0) # Green
+
+    # Case 3: The arrangement is incorrect (e.g., wrong count, boxes in wrong spots).
+    else:
+        result_text = "Result: NOT OK"
+        result_color = (0, 0, 255) # Red
+    cv2.putText(test_img, result_text, (30, test_img.shape[0] - 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.2, result_color, 3, cv2.LINE_AA)
+    combined = np.hstack((ref_img, test_img))
+
+    cv2.imshow("Packing Arrangement Check", combined)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+reference_image = "perfect.jpg"
+test_image = "test.jpg"
+
+check_arrangement(reference_image, test_image)
