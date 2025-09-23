@@ -14,7 +14,7 @@ engine.setProperty("volume", 1.0)
 last_alert_time = 0
 cooldown = 3  # seconds
 
-cap = cv2.VideoCapture(0)  # or replace with your video file path
+cap = cv2.VideoCapture(0)  # webcam (use path to .mp4 if video file)
 
 while True:
     ret, frame = cap.read()
@@ -32,15 +32,20 @@ while True:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             label = model.names[cls_id]
 
+            # Map label: show "Head" instead of "no_helmet"
+            if label == "no_helmet":
+                display_label = "Head"
+                color = (0, 0, 255)  # Red for warning
+                no_helmet_detected = True
+            else:
+                display_label = "Helmet"
+                color = (0, 255, 0)  # Green for safe
+
             # Draw detections
-            color = (0, 255, 0) if label == "helmet" else (0, 0, 255)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, f"{label} {conf:.2f}",
+            cv2.putText(frame, f"{display_label} {conf:.2f}",
                         (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
                         0.8, color, 2)
-
-            if label == "no_helmet" and conf > 0.6:
-                no_helmet_detected = True
 
     # 🔊 Voice alert only once per cooldown
     if no_helmet_detected and (time.time() - last_alert_time > cooldown):
