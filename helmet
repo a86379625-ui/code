@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import cv2
 import pyttsx3
+import threading
 
 # Load YOLO model
 model = YOLO("best.pt")
@@ -9,6 +10,16 @@ model = YOLO("best.pt")
 engine = pyttsx3.init()
 engine.setProperty("rate", 150)
 engine.setProperty("volume", 1.0)
+
+# Global flag for alert
+alert_active = False
+
+def voice_alert():
+    """Background thread that keeps speaking until helmet is detected."""
+    global alert_active
+    while alert_active:
+        engine.say("Please wear helmet")
+        engine.runAndWait()
 
 cap = cv2.VideoCapture(0)  # webcam
 
@@ -19,7 +30,7 @@ while True:
 
     results = model(frame, stream=True)
 
-    no_helmet_detected = False  # Flag to track if anyone is without helmet
+    no_helmet_detected = False
 
     for r in results:
         for box in r.boxes:
@@ -39,10 +50,14 @@ while True:
             if label.lower() in ["head", "no_helmet"] and conf > 0.7:
                 no_helmet_detected = True
 
-    # 🔊 Voice Alert if any person is without helmet
-    if no_helmet_detected:
-        engine.say("Please wear helmet")
-        engine.runAndWait()
+    # Start alert if no helmet
+    if no_helmet_detected and not alert_active:
+        alert_active = True
+        threading.Thread(target=voice_alert, daemon=True).start()
+
+    # Stop alert if helmet detected
+    if not no_helmet_detected and alert_active:
+        alert_active = False
 
     cv2.imshow("Helmet Detection", frame)
 
