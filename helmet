@@ -1,11 +1,14 @@
 from ultralytics import YOLO
 import cv2
 
-# Load ONNX model with explicit task
-model = YOLO("yolov8n.onnx", task="detect")
+# Load your trained model
+model = YOLO("best.pt")
 
-# Open webcam
-cap = cv2.VideoCapture(0)
+# Test on a single image
+results = model("test.jpg", show=True)
+
+# --- OR run on webcam/video ---
+cap = cv2.VideoCapture(0)  # change to video file path if needed
 
 while True:
     ret, frame = cap.read()
@@ -13,14 +16,25 @@ while True:
         break
 
     # Run inference
-    results = model(frame)
+    results = model(frame, stream=True)
 
-    # Draw predictions
-    annotated_frame = results[0].plot()
+    for r in results:
+        for box in r.boxes:
+            cls_id = int(box.cls[0])
+            conf = float(box.conf[0])
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-    cv2.imshow("Helmet Detection", annotated_frame)
+            label = model.names[cls_id]
+            color = (0, 255, 0) if label == "helmet" else (0, 0, 255)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, f"{label} {conf:.2f}",
+                        (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, color, 2)
+
+    cv2.imshow("Helmet Detection", frame)
+
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
