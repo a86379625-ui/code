@@ -1,27 +1,22 @@
 from ultralytics import YOLO
 import cv2
 import pyttsx3
-import threading
+import time
 
 # Load YOLO model
 model = YOLO("best.pt")
 
-# Setup TTS engine
+# Setup TTS engine (non-blocking)
 engine = pyttsx3.init()
 engine.setProperty("rate", 150)
 engine.setProperty("volume", 1.0)
-
-# Global flag for alert
-alert_active = False
-
-def voice_alert():
-    """Background thread that keeps speaking until helmet is detected."""
-    global alert_active
-    while alert_active:
-        engine.say("Please wear helmet")
-        engine.runAndWait()
+engine.startLoop(False)  # async loop
 
 cap = cv2.VideoCapture(0)  # webcam
+
+alert_active = False
+last_alert_time = 0
+alert_interval = 5  # seconds between reminders
 
 while True:
     ret, frame = cap.read()
@@ -29,7 +24,6 @@ while True:
         break
 
     results = model(frame, stream=True)
-
     no_helmet_detected = False
 
     for r in results:
@@ -39,25 +33,26 @@ while True:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             label = model.names[cls_id]
 
-            # Draw bounding boxes
+            # Draw detections
             color = (0, 255, 0) if label == "helmet" else (0, 0, 255)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, f"{label} {conf:.2f}",
                         (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
                         0.8, color, 2)
 
-            # Check for "head" (no helmet)
             if label.lower() in ["head", "no_helmet"] and conf > 0.7:
                 no_helmet_detected = True
 
-    # Start alert if no helmet
-    if no_helmet_detected and not alert_active:
+    # 🔊 Voice alert handling
+    if no_helmet_detected:
+        if time.time() - last_alert_time > alert_interval:
+            engine.say("Please wear helmet")
+            last_alert_time = time.time()
         alert_active = True
-        threading.Thread(target=voice_alert, daemon=True).start()
-
-    # Stop alert if helmet detected
-    if not no_helmet_detected and alert_active:
+    else:
         alert_active = False
+
+    engine.iterate()  # process speech events each loop
 
     cv2.imshow("Helmet Detection", frame)
 
@@ -66,3 +61,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+engine.endLoop()
