@@ -1,7 +1,6 @@
 from ultralytics import YOLO
 import cv2
 import pyttsx3
-import time
 
 # Load YOLO model
 model = YOLO("best.pt")
@@ -11,11 +10,7 @@ engine = pyttsx3.init()
 engine.setProperty("rate", 150)
 engine.setProperty("volume", 1.0)
 
-# Track last alert time
-last_alert_time = 0
-cooldown = 25  # seconds
-
-cap = cv2.VideoCapture(0)  # webcam (use video path if needed)
+cap = cv2.VideoCapture(0)  # webcam
 
 while True:
     ret, frame = cap.read()
@@ -24,6 +19,8 @@ while True:
 
     results = model(frame, stream=True)
 
+    no_helmet_detected = False  # Flag to track if anyone is without helmet
+
     for r in results:
         for box in r.boxes:
             cls_id = int(box.cls[0])
@@ -31,18 +28,21 @@ while True:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             label = model.names[cls_id]
 
+            # Draw bounding boxes
             color = (0, 255, 0) if label == "helmet" else (0, 0, 255)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, f"{label} {conf:.2f}",
                         (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX,
                         0.8, color, 2)
 
-            # 🔊 Speak if no helmet detected (with cooldown)
-            if label == "head" and conf > 0.7:
-                if time.time() - last_alert_time > cooldown:
-                    engine.say("Please wear helmet")
-                    engine.runAndWait()
-                    last_alert_time = time.time()
+            # Check for "head" (no helmet)
+            if label.lower() in ["head", "no_helmet"] and conf > 0.7:
+                no_helmet_detected = True
+
+    # 🔊 Voice Alert if any person is without helmet
+    if no_helmet_detected:
+        engine.say("Please wear helmet")
+        engine.runAndWait()
 
     cv2.imshow("Helmet Detection", frame)
 
