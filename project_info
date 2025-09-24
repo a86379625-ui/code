@@ -1,0 +1,33 @@
+Option 1: 
+No-Code Tool (Quick Demo)
+Tools: Chatbase, DocsBot, Poe (Knowledge Bases)
+
+Steps: Upload PDF/Doc → Get chatbot link → Show demo.
+
+✅ Easiest, no coding.
+
+❌ Not much technical learning. Professors may feel it’s “too easy”.
+
+ Option 2: 
+Python + LangChain + ChromaDB 
+Parse file → Split into text chunks.
+
+Convert chunks into embeddings (OpenAI or HuggingFace).
+
+Store embeddings in ChromaDB (free, works locally).
+
+Build a chatbot UI using Streamlit or Gradio.
+
+Ask questions → Retrieve relevant text → Pass into GPT (or open-source model).
+
+👉 This shows understanding of AI pipelines and looks impressive in presentations.
+
+Option 3: 
+Open-Source Local LLM (Offline Project)
+Use LLaMA 2 / Mistral + FAISS/ChromaDB.
+
+Works without internet after setup.
+
+Professors will like it because it looks fully custom.
+
+Slightly heavier to run (needs a GPU or Colab).
